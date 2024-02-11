@@ -4,16 +4,23 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.AI;
 
-public class SceneController : Singleton<SceneController>
+public class SceneController : Singleton<SceneController>,IEndGameObserver
 {
     public GameObject playerPrefab;
     GameObject player;
     NavMeshAgent playerAgent;
+    public SceneFader sceneFaderPrefab;
+    bool fadeFinished;//防止玩家死亡后不断地loadMain
 
     protected override void Awake()
     {
         base.Awake();
         DontDestroyOnLoad(this);
+    }
+    void Start()
+    {
+        fadeFinished = true;
+        GameManager.Instance.addObserver(this);//注册观察者
     }
     public void TransitionToDestination(TransitionPoint transitionPoint)
     {
@@ -92,22 +99,40 @@ public class SceneController : Singleton<SceneController>
 
     IEnumerator LoadLevel(string scene)
     {
-        if(name != "")
+        SceneFader fade = Instantiate(sceneFaderPrefab);
+        if(scene != "")
         {
+            yield return StartCoroutine(fade.FadeOut());
             yield return SceneManager.LoadSceneAsync(scene);
             yield return player = Instantiate(playerPrefab, GameManager.Instance.GetEntrance().position, GameManager.Instance.GetEntrance().rotation);
             //获取传送点位置——游戏一直存在的组件中去获得——GameManager，类似上面GetDestination的方法
 
             //保存数据——存疑，不确定必不必要
             SaveManager.Instance.SavePlayerData();
+            yield return StartCoroutine(fade.FadeIn());
+
+            fadeFinished = true;//死亡后重新进入游戏一定会加载场景，此时再让fadeFinished为true
             yield break;
         }
     }
 
     IEnumerator LoadMain()
     {
+        SceneFader fade = Instantiate(sceneFaderPrefab);
+        yield return StartCoroutine(fade.FadeOut());
         yield return SceneManager.LoadSceneAsync("Main");
+        yield return StartCoroutine(fade.FadeIn());
         yield break;
+    }
+
+    public void EndNotify()
+    {
+        if (fadeFinished)
+        {
+            fadeFinished = false;
+            StartCoroutine(LoadMain());
+        }
+
     }
 }
 
